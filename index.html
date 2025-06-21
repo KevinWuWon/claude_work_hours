@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Work Hours Analyzer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #334155;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            color: #1e293b;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            background: white;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-zone.dragover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .upload-zone h3 {
+            color: #475569;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        .upload-zone p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+
+        .upload-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .upload-button:hover {
+            background: #2563eb;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h4 {
+            color: #64748b;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            color: #1e293b;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card h3 {
+            color: #1e293b;
+            margin-bottom: 1.5rem;
+            font-size: 1.25rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+        }
+
+        .chart-card.heatmap-card {
+            grid-column: 1 / -1;
+        }
+
+        .heatmap-container {
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .heatmap-table {
+            font-size: 0.75rem;
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 800px;
+        }
+
+        .heatmap-table th {
+            padding: 0.25rem;
+            text-align: center;
+            font-weight: 500;
+            background: #f8fafc;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .heatmap-table td {
+            width: 20px;
+            height: 12px;
+            padding: 0;
+            border: 1px solid #f1f5f9;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .heatmap-table td:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 4px;
+            white-space: nowrap;
+            font-size: 0.875rem;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .heatmap-table .day-label {
+            padding: 0.25rem 0.5rem;
+            text-align: right;
+            font-weight: 500;
+            background: #f8fafc;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            height: 12px;
+            vertical-align: middle;
+        }
+
+        .heatmap-table .day-label.weekend {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .heatmap-legend {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        .heatmap-legend-gradient {
+            width: 200px;
+            height: 20px;
+            background: linear-gradient(to right, #f1f5f9, #dbeafe, #93c5fd, #3b82f6, #1e40af);
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: #64748b;
+        }
+
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (min-width: 768px) {
+            .charts-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .charts-container {
+                grid-template-columns: 2fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Claude Work Hours Analyzer</h1>
+            <p>Analyze your Claude conversation logs to estimate daily work hours</p>
+        </div>
+
+        <div class="upload-zone" id="uploadZone">
+            <h3>Drop JSONL files here</h3>
+            <p>Drag and drop your Claude conversation JSONL files, or click to select</p>
+            <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap;">
+                <button class="upload-button" id="uploadButton">Select Files</button>
+                <button class="upload-button" id="analyzeButton" style="background: #059669; display: none;">Analyze Files</button>
+            </div>
+            <div id="filesList" style="margin-top: 1rem; font-size: 0.875rem; color: #64748b;"></div>
+            <input type="file" id="fileInput" multiple accept=".jsonl" style="display: none;">
+        </div>
+
+        <div class="loading" id="loading">
+            <p>Analyzing conversations...</p>
+        </div>
+
+        <div class="error hidden" id="error"></div>
+
+        <div class="stats-grid hidden" id="statsGrid">
+            <div class="stat-card">
+                <h4>Total Days</h4>
+                <div class="value" id="totalDays">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>Total Hours</h4>
+                <div class="value" id="totalHours">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>Avg Hours/Day</h4>
+                <div class="value" id="avgHours">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>Max Day</h4>
+                <div class="value" id="maxHours">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>Break Threshold</h4>
+                <div class="value" id="breakThreshold">0</div>
+            </div>
+            <div class="stat-card">
+                <h4>Sessions Analyzed</h4>
+                <div class="value" id="sessionsCount">0</div>
+            </div>
+        </div>
+
+        <div class="charts-container hidden" id="chartsContainer">
+            <div class="chart-card">
+                <h3>Daily Work Hours</h3>
+                <div class="chart-container">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Gap Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="gapChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card heatmap-card">
+                <h3>Work Pattern Heatmap (15-minute intervals)</h3>
+                <div class="heatmap-container" id="heatmapContainer"></div>
+                <div class="heatmap-legend">
+                    <span>Less</span>
+                    <div class="heatmap-legend-gradient"></div>
+                    <span>More</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // @ts-check
+        
+        // ESM imports
+        import { Chart, registerables } from 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/+esm';
+        
+        // Register Chart.js components
+        Chart.register(...registerables);
+
+        /**
+         * @typedef {Object} ConversationMessage
+         * @property {string} timestamp - ISO timestamp
+         * @property {'user'|'assistant'|'summary'} type - Message type
+         * @property {string} sessionId - Session identifier
+         * @property {string} [cwd] - Working directory
+         * @property {number} [durationMs] - Response duration
+         * @property {Object} [message] - Message content
+         * @property {number} [costUSD] - Cost of the message
+         */
+
+        /**
+         * @typedef {Object} WorkSession
+         * @property {Date} startTime
+         * @property {Date} endTime
+         * @property {number} estimatedHours
+         * @property {ConversationMessage[]} messages
+         * @property {string} sessionId
+         */
+
+        /**
+         * @typedef {Object} DailyStats
+         * @property {string} date - YYYY-MM-DD format
+         * @property {number} totalHours
+         * @property {WorkSession[]} sessions
+         * @property {number} messageCount
+         */
+
+        /**
+         * @typedef {Object} GapAnalysis
+         * @property {number} breakThresholdMs
+         * @property {number[]} gaps
+         * @property {number} p50
+         * @property {number} p75
+         * @property {number} p85
+         * @property {number} p95
+         */
+
+        /**
+         * @typedef {Object} IntervalData
+         * @property {string} date - YYYY-MM-DD format
+         * @property {number[]} intervals - 96 intervals (24 hours * 4 quarters)
+         * @property {WorkSession[]} sessions
+         */
+
+        /** @type {Chart | null} */
+        let dailyChart = null;
+        /** @type {Chart | null} */
+        let gapChart = null;
+        /** @type {File[]} */
+        let accumulatedFiles = [];
+
+        // DOM elements
+        const uploadZone = document.getElementById('uploadZone');
+        const uploadButton = document.getElementById('uploadButton');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const filesList = document.getElementById('filesList');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const statsGrid = document.getElementById('statsGrid');
+        const chartsContainer = document.getElementById('chartsContainer');
+
+        // Stats elements
+        const totalDaysEl = document.getElementById('totalDays');
+        const totalHoursEl = document.getElementById('totalHours');
+        const avgHoursEl = document.getElementById('avgHours');
+        const maxHoursEl = document.getElementById('maxHours');
+        const breakThresholdEl = document.getElementById('breakThreshold');
+        const sessionsCountEl = document.getElementById('sessionsCount');
+
+        // Event listeners
+        uploadZone?.addEventListener('click', () => fileInput?.click());
+        uploadButton?.addEventListener('click', () => fileInput?.click());
+        analyzeButton?.addEventListener('click', analyzeAccumulatedFiles);
+        fileInput?.addEventListener('change', handleFileSelect);
+        
+        // Drag and drop
+        uploadZone?.addEventListener('dragover', handleDragOver);
+        uploadZone?.addEventListener('drop', handleDrop);
+        uploadZone?.addEventListener('dragleave', handleDragLeave);
+
+        /**
+         * Handle drag over event
+         * @param {DragEvent} e
+         */
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadZone?.classList.add('dragover');
+        }
+
+        /**
+         * Handle drag leave event
+         * @param {DragEvent} e
+         */
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadZone?.classList.remove('dragover');
+        }
+
+        /**
+         * Handle drop event
+         * @param {DragEvent} e
+         */
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadZone?.classList.remove('dragover');
+            
+            const files = e.dataTransfer?.files;
+            if (files) {
+                addFiles(Array.from(files));
+            }
+        }
+
+        /**
+         * Handle file select event
+         * @param {Event} e
+         */
+        function handleFileSelect(e) {
+            const target = /** @type {HTMLInputElement} */ (e.target);
+            const files = target.files;
+            if (files) {
+                addFiles(Array.from(files));
+            }
+        }
+
+        /**
+         * Add files to the accumulated list
+         * @param {File[]} files
+         */
+        function addFiles(files) {
+            const jsonlFiles = files.filter(f => f.name.endsWith('.jsonl'));
+            
+            if (jsonlFiles.length === 0) {
+                showError('Please select JSONL files');
+                return;
+            }
+
+            hideError();
+
+            // Add new files, avoiding duplicates by name
+            for (const file of jsonlFiles) {
+                if (!accumulatedFiles.some(f => f.name === file.name)) {
+                    accumulatedFiles.push(file);
+                }
+            }
+
+            updateFilesList();
+            
+            if (accumulatedFiles.length > 0) {
+                analyzeButton?.style.setProperty('display', 'inline-block');
+            }
+        }
+
+        /**
+         * Update the files list display
+         */
+        function updateFilesList() {
+            if (!filesList) return;
+
+            if (accumulatedFiles.length === 0) {
+                filesList.textContent = '';
+                return;
+            }
+
+            filesList.innerHTML = `
+                <strong>${accumulatedFiles.length} files ready for analysis:</strong><br>
+                ${accumulatedFiles.slice(0, 5).map(f => f.name).join(', ')}
+                ${accumulatedFiles.length > 5 ? ` and ${accumulatedFiles.length - 5} more...` : ''}
+            `;
+        }
+
+        /**
+         * Analyze all accumulated files
+         */
+        async function analyzeAccumulatedFiles() {
+            if (accumulatedFiles.length === 0) {
+                showError('No files to analyze');
+                return;
+            }
+
+            showLoading(true);
+            hideError();
+
+            try {
+                const messages = await parseFiles(accumulatedFiles);
+                const analysis = analyzeWorkHours(messages);
+                displayResults(analysis);
+            } catch (err) {
+                showError(err instanceof Error ? err.message : 'An error occurred');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+
+        /**
+         * Parse JSONL files into conversation messages
+         * @param {File[]} files
+         * @returns {Promise<ConversationMessage[]>}
+         */
+        async function parseFiles(files) {
+            /** @type {ConversationMessage[]} */
+            const allMessages = [];
+
+            for (const file of files) {
+                const content = await readFileContent(file);
+                const messages = parseJsonlContent(content);
+                allMessages.push(...messages);
+            }
+
+            return allMessages.sort((a, b) => 
+                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+            );
+        }
+
+        /**
+         * Read file content as text
+         * @param {File} file
+         * @returns {Promise<string>}
+         */
+        function readFileContent(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target?.result?.toString() || '');
+                reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+                reader.readAsText(file);
+            });
+        }
+
+        /**
+         * Parse JSONL content into messages
+         * @param {string} content
+         * @returns {ConversationMessage[]}
+         */
+        function parseJsonlContent(content) {
+            /** @type {ConversationMessage[]} */
+            const messages = [];
+            
+            const lines = content.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+                try {
+                    const data = JSON.parse(line);
+                    
+                    // Handle different message formats
+                    if (data.timestamp && (data.type || data.message)) {
+                        messages.push({
+                            timestamp: data.timestamp,
+                            type: data.type || 'user',
+                            sessionId: data.sessionId || 'unknown',
+                            cwd: data.cwd,
+                            durationMs: data.durationMs,
+                            message: data.message,
+                            costUSD: data.costUSD
+                        });
+                    }
+                } catch (err) {
+                    // Skip malformed lines
+                    console.warn('Failed to parse line:', line);
+                }
+            }
+            
+            return messages;
+        }
+
+        /**
+         * Analyze messages to calculate work hours
+         * @param {ConversationMessage[]} messages
+         * @returns {{ dailyStats: DailyStats[], gapAnalysis: GapAnalysis, totalSessions: number }}
+         */
+        function analyzeWorkHours(messages) {
+            // First, analyze gaps to determine break threshold
+            const gapAnalysis = analyzeGaps(messages);
+            
+            // Group messages by session
+            const sessions = groupIntoSessions(messages, gapAnalysis.breakThresholdMs);
+            
+            // Calculate daily stats
+            const dailyStats = aggregateByDay(sessions);
+            
+            return {
+                dailyStats,
+                gapAnalysis,
+                totalSessions: sessions.length
+            };
+        }
+
+        /**
+         * Analyze gaps between messages to determine break threshold
+         * @param {ConversationMessage[]} messages
+         * @returns {GapAnalysis}
+         */
+        function analyzeGaps(messages) {
+            /** @type {number[]} */
+            const gaps = [];
+            
+            // Calculate gaps between consecutive messages
+            for (let i = 1; i < messages.length; i++) {
+                const prevTime = new Date(messages[i - 1].timestamp).getTime();
+                const currTime = new Date(messages[i].timestamp).getTime();
+                const gap = currTime - prevTime;
+                
+                if (gap > 0 && gap < 24 * 60 * 60 * 1000) { // Ignore gaps > 24 hours
+                    gaps.push(gap);
+                }
+            }
+            
+            gaps.sort((a, b) => a - b);
+            
+            const p50 = percentile(gaps, 50);
+            const p75 = percentile(gaps, 75);
+            const p85 = percentile(gaps, 85);
+            const p95 = percentile(gaps, 95);
+            
+            // Use 75th percentile as break threshold, but ensure it's at least 15 minutes
+            const breakThresholdMs = Math.max(p75, 15 * 60 * 1000);
+            
+            return {
+                breakThresholdMs,
+                gaps,
+                p50,
+                p75,
+                p85,
+                p95
+            };
+        }
+
+        /**
+         * Calculate percentile of an array
+         * @param {number[]} arr - Sorted array
+         * @param {number} p - Percentile (0-100)
+         * @returns {number}
+         */
+        function percentile(arr, p) {
+            if (arr.length === 0) return 0;
+            const index = (p / 100) * (arr.length - 1);
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+            const weight = index % 1;
+            
+            if (upper >= arr.length) return arr[arr.length - 1];
+            return arr[lower] * (1 - weight) + arr[upper] * weight;
+        }
+
+        /**
+         * Group messages into work sessions based on gaps
+         * @param {ConversationMessage[]} messages
+         * @param {number} breakThresholdMs
+         * @returns {WorkSession[]}
+         */
+        function groupIntoSessions(messages, breakThresholdMs) {
+            if (messages.length === 0) return [];
+            
+            /** @type {WorkSession[]} */
+            const sessions = [];
+            /** @type {ConversationMessage[]} */
+            let currentSessionMessages = [messages[0]];
+            
+            for (let i = 1; i < messages.length; i++) {
+                const prevTime = new Date(messages[i - 1].timestamp).getTime();
+                const currTime = new Date(messages[i].timestamp).getTime();
+                const gap = currTime - prevTime;
+                
+                if (gap > breakThresholdMs) {
+                    // End current session
+                    if (currentSessionMessages.length > 0) {
+                        sessions.push(createWorkSession(currentSessionMessages));
+                    }
+                    // Start new session
+                    currentSessionMessages = [messages[i]];
+                } else {
+                    // Continue current session
+                    currentSessionMessages.push(messages[i]);
+                }
+            }
+            
+            // Add final session
+            if (currentSessionMessages.length > 0) {
+                sessions.push(createWorkSession(currentSessionMessages));
+            }
+            
+            return sessions;
+        }
+
+        /**
+         * Create work session from messages
+         * @param {ConversationMessage[]} messages
+         * @returns {WorkSession}
+         */
+        function createWorkSession(messages) {
+            const startTime = new Date(messages[0].timestamp);
+            const endTime = new Date(messages[messages.length - 1].timestamp);
+            
+            // Base time: session duration
+            const baseTimeMs = endTime.getTime() - startTime.getTime();
+            
+            // Add reading time for assistant messages
+            let readingTimeMs = 0;
+            for (const msg of messages) {
+                if (msg.type === 'assistant') {
+                    readingTimeMs += estimateReadingTime(msg);
+                }
+            }
+            
+            // Total estimated time (minimum 5 minutes for any session)
+            const totalTimeMs = Math.max(baseTimeMs + readingTimeMs, 5 * 60 * 1000);
+            const estimatedHours = totalTimeMs / (1000 * 60 * 60);
+            
+            return {
+                startTime,
+                endTime,
+                estimatedHours,
+                messages,
+                sessionId: messages[0].sessionId
+            };
+        }
+
+        /**
+         * Estimate reading time for a message
+         * @param {ConversationMessage} message
+         * @returns {number} Reading time in milliseconds
+         */
+        function estimateReadingTime(message) {
+            if (!message.message || !message.message.content) return 0;
+            
+            const content = JSON.stringify(message.message.content);
+            const wordCount = content.split(/\s+/).length;
+            
+            // Base reading speed: 200 WPM (3.33 words/second)
+            let readingTimeMs = (wordCount / 3.33) * 1000;
+            
+            // Adjust for content type
+            if (content.includes('"type":"tool_use"') || content.includes('"type":"thinking"')) {
+                readingTimeMs *= 1.5; // Tool usage requires more processing time
+            }
+            
+            if (content.includes('```') || content.includes('function') || content.includes('const ')) {
+                readingTimeMs *= 2; // Code takes longer to read
+            }
+            
+            // Minimum 10 seconds, maximum 5 minutes per message
+            return Math.min(Math.max(readingTimeMs, 10000), 5 * 60 * 1000);
+        }
+
+        /**
+         * Get work day for a timestamp (5am = start of day)
+         * @param {Date} timestamp
+         * @returns {string} YYYY-MM-DD format
+         */
+        function getWorkDay(timestamp) {
+            const workDay = new Date(timestamp);
+            // If before 5am, count as previous day
+            if (workDay.getHours() < 5) {
+                workDay.setDate(workDay.getDate() - 1);
+            }
+            return workDay.toISOString().split('T')[0];
+        }
+
+        /**
+         * Aggregate sessions by day
+         * @param {WorkSession[]} sessions
+         * @returns {DailyStats[]}
+         */
+        function aggregateByDay(sessions) {
+            /** @type {Map<string, WorkSession[]>} */
+            const dayGroups = new Map();
+            
+            for (const session of sessions) {
+                const dateStr = getWorkDay(session.startTime);
+                if (!dayGroups.has(dateStr)) {
+                    dayGroups.set(dateStr, []);
+                }
+                dayGroups.get(dateStr)?.push(session);
+            }
+            
+            /** @type {DailyStats[]} */
+            const dailyStats = [];
+            
+            for (const [date, daySessions] of dayGroups) {
+                const totalHours = daySessions.reduce((sum, s) => sum + s.estimatedHours, 0);
+                const messageCount = daySessions.reduce((sum, s) => sum + s.messages.length, 0);
+                
+                // Cap daily hours at 16 (sanity check)
+                const cappedHours = Math.min(totalHours, 16);
+                
+                dailyStats.push({
+                    date,
+                    totalHours: cappedHours,
+                    sessions: daySessions,
+                    messageCount
+                });
+            }
+            
+            return dailyStats.sort((a, b) => a.date.localeCompare(b.date));
+        }
+
+        /**
+         * Display analysis results
+         * @param {{ dailyStats: DailyStats[], gapAnalysis: GapAnalysis, totalSessions: number }} analysis
+         */
+        function displayResults(analysis) {
+            const { dailyStats, gapAnalysis, totalSessions } = analysis;
+            
+            // Update stats
+            const totalHours = dailyStats.reduce((sum, day) => sum + day.totalHours, 0);
+            const avgHours = dailyStats.length > 0 ? totalHours / dailyStats.length : 0;
+            const maxHours = Math.max(...dailyStats.map(day => day.totalHours), 0);
+            
+            if (totalDaysEl) totalDaysEl.textContent = dailyStats.length.toString();
+            if (totalHoursEl) totalHoursEl.textContent = totalHours.toFixed(1);
+            if (avgHoursEl) avgHoursEl.textContent = avgHours.toFixed(1);
+            if (maxHoursEl) maxHoursEl.textContent = maxHours.toFixed(1);
+            if (breakThresholdEl) breakThresholdEl.textContent = `${Math.round(gapAnalysis.breakThresholdMs / (1000 * 60))}m`;
+            if (sessionsCountEl) sessionsCountEl.textContent = totalSessions.toString();
+            
+            // Show results
+            statsGrid?.classList.remove('hidden');
+            chartsContainer?.classList.remove('hidden');
+            
+            // Create charts
+            createDailyChart(dailyStats);
+            createGapChart(gapAnalysis);
+            createWorkPatternHeatmap(dailyStats);
+        }
+
+        /**
+         * Create daily hours chart
+         * @param {DailyStats[]} dailyStats
+         */
+        function createDailyChart(dailyStats) {
+            const ctx = /** @type {HTMLCanvasElement} */ (document.getElementById('dailyChart'));
+            if (!ctx) return;
+            
+            if (dailyChart) {
+                dailyChart.destroy();
+            }
+            
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dailyStats.map(day => {
+                        const date = new Date(day.date);
+                        return `${date.getDate()}/${date.getMonth() + 1}`;
+                    }),
+                    datasets: [{
+                        label: 'Hours',
+                        data: dailyStats.map(day => day.totalHours),
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                        borderColor: 'rgb(59, 130, 246)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Hours'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Create gap distribution chart
+         * @param {GapAnalysis} gapAnalysis
+         */
+        function createGapChart(gapAnalysis) {
+            const ctx = /** @type {HTMLCanvasElement} */ (document.getElementById('gapChart'));
+            if (!ctx) return;
+            
+            if (gapChart) {
+                gapChart.destroy();
+            }
+            
+            // Create histogram bins
+            const maxGap = Math.min(Math.max(...gapAnalysis.gaps), 2 * 60 * 60 * 1000); // Cap at 2 hours
+            const binCount = 20;
+            const binSize = maxGap / binCount;
+            
+            /** @type {number[]} */
+            const bins = new Array(binCount).fill(0);
+            /** @type {string[]} */
+            const labels = [];
+            
+            for (let i = 0; i < binCount; i++) {
+                const binStart = i * binSize;
+                const binEnd = (i + 1) * binSize;
+                labels.push(`${Math.round(binStart / (1000 * 60))}-${Math.round(binEnd / (1000 * 60))}m`);
+                
+                // Count gaps in this bin
+                for (const gap of gapAnalysis.gaps) {
+                    if (gap >= binStart && gap < binEnd) {
+                        bins[i]++;
+                    }
+                }
+            }
+            
+            gapChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data: bins,
+                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                        borderColor: 'rgb(34, 197, 94)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Count'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Gap Duration'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Create work pattern heatmap
+         * @param {DailyStats[]} dailyStats
+         */
+        function createWorkPatternHeatmap(dailyStats) {
+            const container = document.getElementById('heatmapContainer');
+            if (!container) return;
+
+            if (dailyStats.length === 0) return;
+
+            // Create a map of existing data
+            /** @type {Map<string, DailyStats>} */
+            const dataMap = new Map();
+            for (const day of dailyStats) {
+                dataMap.set(day.date, day);
+            }
+
+            // Find date range
+            const firstDate = new Date(dailyStats[0].date);
+            const lastDate = new Date(dailyStats[dailyStats.length - 1].date);
+
+            // Build interval data for all dates in range
+            /** @type {IntervalData[]} */
+            const intervalData = [];
+
+            for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+                const dateStr = d.toISOString().split('T')[0];
+                const intervals = new Array(96).fill(0); // 24 hours * 4 (15-min intervals)
+                
+                const dayData = dataMap.get(dateStr);
+                if (dayData) {
+                    for (const session of dayData.sessions) {
+                        // Mark all 15-minute intervals during this session
+                        const startTime = session.startTime;
+                        const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1]));
+                        
+                        // Calculate start and end intervals (offset by 5 hours for 5am start)
+                        const startMinutes = (startTime.getHours() - 5 + 24) % 24 * 60 + startTime.getMinutes();
+                        const endMinutes = (endTime.getHours() - 5 + 24) % 24 * 60 + endTime.getMinutes();
+                        const startInterval = Math.floor(startMinutes / 15);
+                        const endInterval = Math.min(95, Math.floor(endMinutes / 15));
+                        
+                        // Fill in the intervals
+                        for (let i = startInterval; i <= endInterval; i++) {
+                            intervals[i] += 1; // Count overlapping sessions
+                        }
+                    }
+                }
+                
+                intervalData.push({
+                    date: dateStr,
+                    intervals,
+                    sessions: dayData ? dayData.sessions : []
+                });
+            }
+
+            // Create the table
+            const table = document.createElement('table');
+            table.className = 'heatmap-table';
+
+            // Create header row with time labels
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = '<th></th>'; // Empty cell for day labels
+            
+            // Add hour headers (every 4 intervals = 1 hour, starting from 5am)
+            for (let hour = 0; hour < 24; hour++) {
+                const th = document.createElement('th');
+                th.colSpan = 4;
+                const displayHour = (hour + 5) % 24;
+                th.textContent = displayHour.toString().padStart(2, '0');
+                headerRow.appendChild(th);
+            }
+            table.appendChild(headerRow);
+
+            // Find max intensity for color scaling
+            const maxIntensity = Math.max(...intervalData.flatMap(d => d.intervals));
+
+            // Create rows for each day
+            for (const dayData of intervalData) {
+                const row = document.createElement('tr');
+                
+                // Day label
+                const dayLabel = document.createElement('td');
+                dayLabel.className = 'day-label';
+                const date = new Date(dayData.date);
+                const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+                
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    dayLabel.classList.add('weekend');
+                }
+                
+                dayLabel.textContent = `${date.getDate()}/${date.getMonth() + 1}`;
+                row.appendChild(dayLabel);
+
+                // Interval cells
+                for (let i = 0; i < 96; i++) {
+                    const cell = document.createElement('td');
+                    const intensity = dayData.intervals[i];
+                    
+                    if (intensity > 0) {
+                        // Calculate color based on intensity
+                        const normalizedIntensity = intensity / maxIntensity;
+                        const hue = 217; // Blue hue
+                        const saturation = 70 + (normalizedIntensity * 20);
+                        const lightness = 90 - (normalizedIntensity * 40);
+                        cell.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                        
+                        // Add tooltip
+                        const hourOffset = Math.floor(i / 4);
+                        const minute = (i % 4) * 15;
+                        const displayHour = (hourOffset + 5) % 24;
+                        const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                        cell.setAttribute('data-tooltip', `${timeStr} - ${intensity} session${intensity > 1 ? 's' : ''}`);
+                    }
+                    
+                    row.appendChild(cell);
+                }
+                
+                table.appendChild(row);
+            }
+
+            // Clear container and add table
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+
+        /**
+         * Show loading state
+         * @param {boolean} show
+         */
+        function showLoading(show) {
+            if (loading) {
+                loading.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        /**
+         * Show error message
+         * @param {string} message
+         */
+        function showError(message) {
+            if (error) {
+                error.textContent = message;
+                error.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Hide error message
+         */
+        function hideError() {
+            error?.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
