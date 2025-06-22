@@ -660,7 +660,7 @@
                         // Wait for DOM update then create charts
                         await nextTick();
                         createDailyChart(analysis.dailyStats);
-                        createWorkPatternHeatmap(analysis.dailyStats);
+                        createWorkPatternHeatmap(analysis.dailyStats, config);
                     } catch (err) {
                         errorMessage.value = err instanceof Error ? err.message : 'An error occurred';
                     } finally {
@@ -736,7 +736,7 @@
                 };
 
 
-                const createWorkPatternHeatmap = (dailyStats) => {
+                const createWorkPatternHeatmap = (dailyStats, config) => {
                     const container = heatmapContainer.value;
                     if (!container) return;
 
