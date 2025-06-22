@@ -539,16 +539,38 @@
                         dailyChartInstance.destroy();
                     }
                     
+                    // Create a complete date range including zero-data days
+                    let completeData = [];
+                    let labels = [];
+                    
+                    if (dailyStats.length > 0) {
+                        // Create a map for quick lookup of existing data
+                        const dataMap = new Map();
+                        for (const day of dailyStats) {
+                            dataMap.set(day.date, day.totalHours);
+                        }
+                        
+                        // Find date range
+                        const firstDate = new Date(dailyStats[0].date);
+                        const lastDate = new Date(dailyStats[dailyStats.length - 1].date);
+                        
+                        // Generate all dates in range
+                        for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+                            const dateStr = d.toISOString().split('T')[0];
+                            const hours = dataMap.get(dateStr) || 0;
+                            
+                            completeData.push(hours);
+                            labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
+                        }
+                    }
+                    
                     dailyChartInstance = new Chart(ctx, {
                         type: 'bar',
                         data: {
-                            labels: dailyStats.map(day => {
-                                const date = new Date(day.date);
-                                return `${date.getDate()}/${date.getMonth() + 1}`;
-                            }),
+                            labels: labels,
                             datasets: [{
                                 label: 'Hours',
-                                data: dailyStats.map(day => day.totalHours),
+                                data: completeData,
                                 backgroundColor: 'rgba(59, 130, 246, 0.8)',
                                 borderColor: 'rgb(59, 130, 246)',
                                 borderWidth: 1
