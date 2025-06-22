@@ -763,7 +763,7 @@
                         if (dayData) {
                             for (const session of dayData.sessions) {
                                 const startTime = session.startTime;
-                                const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1]));
+                                const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1], config));
                                 
                                 // Calculate session duration in minutes
                                 const sessionDurationMs = endTime.getTime() - startTime.getTime();
