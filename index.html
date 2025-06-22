@@ -245,6 +245,58 @@
             display: none;
         }
 
+        .config-panel {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .config-panel h3 {
+            color: #1e293b;
+            margin-bottom: 1.5rem;
+            font-size: 1.25rem;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .config-item label {
+            font-weight: 500;
+            color: #374151;
+            font-size: 0.875rem;
+        }
+
+        .config-item input {
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+        }
+
+        .config-item input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .config-item small {
+            color: #6b7280;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
         @media (min-width: 768px) {
             .charts-container {
                 grid-template-columns: 1fr;
@@ -294,6 +346,78 @@
             </div>
 
             <div class="error" v-if="errorMessage" v-text="errorMessage"></div>
+
+            <!-- Configuration Panel -->
+            <div class="config-panel" v-if="accumulatedFiles.length > 0 && !analysisResults">
+                <h3>Analysis Configuration</h3>
+                <div class="config-grid">
+                    <div class="config-item">
+                        <label for="readingSpeed">Reading Speed (WPM):</label>
+                        <input type="number" 
+                               id="readingSpeed" 
+                               v-model.number="config.readingSpeedWpm"
+                               min="50" 
+                               max="500" 
+                               step="10">
+                        <small>Words per minute for reading assistant responses</small>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="gapPercentile">Break Threshold Percentile:</label>
+                        <input type="number" 
+                               id="gapPercentile" 
+                               v-model.number="config.gapPercentile"
+                               min="50" 
+                               max="95" 
+                               step="5">
+                        <small>Percentile of message gaps used to determine break threshold</small>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="minBreakMinutes">Minimum Break (minutes):</label>
+                        <input type="number" 
+                               id="minBreakMinutes" 
+                               v-model.number="config.minBreakMinutes"
+                               min="5" 
+                               max="60" 
+                               step="5">
+                        <small>Minimum break duration to separate work sessions</small>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="workDayStartHour">Work Day Start Hour:</label>
+                        <input type="number" 
+                               id="workDayStartHour" 
+                               v-model.number="config.workDayStartHour"
+                               min="0" 
+                               max="12" 
+                               step="1">
+                        <small>Hour when work day begins (sessions before this count as previous day)</small>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="maxDailyHours">Max Daily Hours:</label>
+                        <input type="number" 
+                               id="maxDailyHours" 
+                               v-model.number="config.maxDailyHours"
+                               min="8" 
+                               max="24" 
+                               step="1">
+                        <small>Maximum reasonable daily work hours (caps unrealistic estimates)</small>
+                    </div>
+                    
+                    <div class="config-item">
+                        <label for="codeMultiplier">Code Reading Multiplier:</label>
+                        <input type="number" 
+                               id="codeMultiplier" 
+                               v-model.number="config.codeMultiplier"
+                               min="1" 
+                               max="5" 
+                               step="0.1">
+                        <small>Time multiplier for reading code (vs regular text)</small>
+                    </div>
+                </div>
+            </div>
 
             <div class="stats-grid" v-if="analysisResults">
                 <div class="stat-card">
@@ -412,6 +536,16 @@
                 const errorMessage = ref('');
                 const analysisResults = ref(null);
                 
+                // Configuration state with defaults
+                const config = reactive({
+                    readingSpeedWpm: 200,
+                    gapPercentile: 75,
+                    minBreakMinutes: 15,
+                    workDayStartHour: 5,
+                    maxDailyHours: 16,
+                    codeMultiplier: 2.0
+                });
+                
                 // Chart refs
                 const dailyChart = ref(null);
                 const heatmapContainer = ref(null);
@@ -520,7 +654,7 @@
 
                     try {
                         const messages = await parseFiles(accumulatedFiles.value);
-                        const analysis = analyzeWorkHours(messages);
+                        const analysis = analyzeWorkHours(messages, config);
                         analysisResults.value = analysis;
                         
                         // Wait for DOM update then create charts
@@ -640,9 +774,9 @@
                                 const durationWeight = Math.min(sessionDurationMinutes / 60, 2); // Scale duration
                                 const baseIntensity = (messageIntensity + durationWeight) / 2;
                                 
-                                // Calculate start and end intervals (offset by 5 hours for 5am start)
-                                const startMinutes = (startTime.getHours() - 5 + 24) % 24 * 60 + startTime.getMinutes();
-                                const endMinutes = (endTime.getHours() - 5 + 24) % 24 * 60 + endTime.getMinutes();
+                                // Calculate start and end intervals (offset by work day start hour)
+                                const startMinutes = (startTime.getHours() - config.workDayStartHour + 24) % 24 * 60 + startTime.getMinutes();
+                                const endMinutes = (endTime.getHours() - config.workDayStartHour + 24) % 24 * 60 + endTime.getMinutes();
                                 const startInterval = Math.floor(startMinutes / 15);
                                 const endInterval = Math.min(95, Math.floor(endMinutes / 15));
                                 
@@ -679,11 +813,11 @@
                     const headerRow = document.createElement('tr');
                     headerRow.innerHTML = '<th></th>'; // Empty cell for day labels
                     
-                    // Add hour headers (every 4 intervals = 1 hour, starting from 5am)
+                    // Add hour headers (every 4 intervals = 1 hour, starting from work day start hour)
                     for (let hour = 0; hour < 24; hour++) {
                         const th = document.createElement('th');
                         th.colSpan = 4;
-                        const displayHour = (hour + 5) % 24;
+                        const displayHour = (hour + config.workDayStartHour) % 24;
                         th.textContent = displayHour.toString().padStart(2, '0');
                         headerRow.appendChild(th);
                     }
@@ -733,7 +867,7 @@
                                 // Add tooltip with improved formatting
                                 const hourOffset = Math.floor(i / 4);
                                 const minute = (i % 4) * 15;
-                                const displayHour = (hourOffset + 5) % 24;
+                                const displayHour = (hourOffset + config.workDayStartHour) % 24;
                                 const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
                                 const intensityStr = intensity.toFixed(1);
                                 cell.setAttribute('data-tooltip', `${timeStr} - ${intensityStr} activity units`);
@@ -763,6 +897,7 @@
                     isLoading,
                     errorMessage,
                     analysisResults,
+                    config,
                     dailyChart,
                     heatmapContainer,
                     fileInput,
@@ -857,17 +992,18 @@
         /**
          * Analyze messages to calculate work hours
          * @param {ConversationMessage[]} messages
+         * @param {Object} config - Configuration parameters
          * @returns {{ dailyStats: DailyStats[], gapAnalysis: GapAnalysis, totalSessions: number }}
          */
-        function analyzeWorkHours(messages) {
+        function analyzeWorkHours(messages, config) {
             // First, analyze gaps to determine break threshold
-            const gapAnalysis = analyzeGaps(messages);
+            const gapAnalysis = analyzeGaps(messages, config);
             
             // Group messages by session
-            const sessions = groupIntoSessions(messages, gapAnalysis.breakThresholdMs);
+            const sessions = groupIntoSessions(messages, gapAnalysis.breakThresholdMs, config);
             
             // Calculate daily stats
-            const dailyStats = aggregateByDay(sessions);
+            const dailyStats = aggregateByDay(sessions, config);
             
             return {
                 dailyStats,
@@ -879,9 +1015,10 @@
         /**
          * Analyze gaps between messages to determine break threshold
          * @param {ConversationMessage[]} messages
+         * @param {Object} config - Configuration parameters
          * @returns {GapAnalysis}
          */
-        function analyzeGaps(messages) {
+        function analyzeGaps(messages, config) {
             /** @type {number[]} */
             const gaps = [];
             
@@ -903,8 +1040,9 @@
             const p85 = percentile(gaps, 85);
             const p95 = percentile(gaps, 95);
             
-            // Use 75th percentile as break threshold, but ensure it's at least 15 minutes
-            const breakThresholdMs = Math.max(p75, 15 * 60 * 1000);
+            // Use configurable percentile as break threshold, but ensure it's at least the minimum break
+            const configPercentile = percentile(gaps, config.gapPercentile);
+            const breakThresholdMs = Math.max(configPercentile, config.minBreakMinutes * 60 * 1000);
             
             return {
                 breakThresholdMs,
@@ -937,9 +1075,10 @@
          * Group messages into work sessions based on gaps
          * @param {ConversationMessage[]} messages
          * @param {number} breakThresholdMs
+         * @param {Object} config - Configuration parameters
          * @returns {WorkSession[]}
          */
-        function groupIntoSessions(messages, breakThresholdMs) {
+        function groupIntoSessions(messages, breakThresholdMs, config) {
             if (messages.length === 0) return [];
             
             /** @type {WorkSession[]} */
@@ -955,7 +1094,7 @@
                 if (gap > breakThresholdMs) {
                     // End current session
                     if (currentSessionMessages.length > 0) {
-                        sessions.push(createWorkSession(currentSessionMessages));
+                        sessions.push(createWorkSession(currentSessionMessages, config));
                     }
                     // Start new session
                     currentSessionMessages = [messages[i]];
@@ -967,7 +1106,7 @@
             
             // Add final session
             if (currentSessionMessages.length > 0) {
-                sessions.push(createWorkSession(currentSessionMessages));
+                sessions.push(createWorkSession(currentSessionMessages, config));
             }
             
             return sessions;
@@ -976,9 +1115,10 @@
         /**
          * Create work session from messages
          * @param {ConversationMessage[]} messages
+         * @param {Object} config - Configuration parameters
          * @returns {WorkSession}
          */
-        function createWorkSession(messages) {
+        function createWorkSession(messages, config) {
             const startTime = new Date(messages[0].timestamp);
             const endTime = new Date(messages[messages.length - 1].timestamp);
             
@@ -989,7 +1129,7 @@
             let readingTimeMs = 0;
             for (const msg of messages) {
                 if (msg.type === 'assistant') {
-                    readingTimeMs += estimateReadingTime(msg);
+                    readingTimeMs += estimateReadingTime(msg, config);
                 }
             }
             
@@ -1009,16 +1149,18 @@
         /**
          * Estimate reading time for a message
          * @param {ConversationMessage} message
+         * @param {Object} config - Configuration parameters
          * @returns {number} Reading time in milliseconds
          */
-        function estimateReadingTime(message) {
+        function estimateReadingTime(message, config) {
             if (!message.message || !message.message.content) return 0;
             
             const content = JSON.stringify(message.message.content);
             const wordCount = content.split(/\s+/).length;
             
-            // Base reading speed: 200 WPM (3.33 words/second)
-            let readingTimeMs = (wordCount / 3.33) * 1000;
+            // Use configurable reading speed
+            const wordsPerSecond = config.readingSpeedWpm / 60;
+            let readingTimeMs = (wordCount / wordsPerSecond) * 1000;
             
             // Adjust for content type
             if (content.includes('"type":"tool_use"') || content.includes('"type":"thinking"')) {
@@ -1026,7 +1168,7 @@
             }
             
             if (content.includes('```') || content.includes('function') || content.includes('const ')) {
-                readingTimeMs *= 2; // Code takes longer to read
+                readingTimeMs *= config.codeMultiplier; // Configurable code reading multiplier
             }
             
             // Minimum 10 seconds, maximum 5 minutes per message
@@ -1034,14 +1176,15 @@
         }
 
         /**
-         * Get work day for a timestamp (5am = start of day)
+         * Get work day for a timestamp
          * @param {Date} timestamp
+         * @param {Object} config - Configuration parameters
          * @returns {string} YYYY-MM-DD format
          */
-        function getWorkDay(timestamp) {
+        function getWorkDay(timestamp, config) {
             const workDay = new Date(timestamp);
-            // If before 5am, count as previous day
-            if (workDay.getHours() < 5) {
+            // If before work day start hour, count as previous day
+            if (workDay.getHours() < config.workDayStartHour) {
                 workDay.setDate(workDay.getDate() - 1);
             }
             return workDay.toISOString().split('T')[0];
@@ -1050,14 +1193,15 @@
         /**
          * Aggregate sessions by day
          * @param {WorkSession[]} sessions
+         * @param {Object} config - Configuration parameters
          * @returns {DailyStats[]}
          */
-        function aggregateByDay(sessions) {
+        function aggregateByDay(sessions, config) {
             /** @type {Map<string, WorkSession[]>} */
             const dayGroups = new Map();
             
             for (const session of sessions) {
-                const dateStr = getWorkDay(session.startTime);
+                const dateStr = getWorkDay(session.startTime, config);
                 if (!dayGroups.has(dateStr)) {
                     dayGroups.set(dateStr, []);
                 }
@@ -1071,8 +1215,8 @@
                 const totalHours = daySessions.reduce((sum, s) => sum + s.estimatedHours, 0);
                 const messageCount = daySessions.reduce((sum, s) => sum + s.messages.length, 0);
                 
-                // Cap daily hours at 16 (sanity check)
-                const cappedHours = Math.min(totalHours, 16);
+                // Cap daily hours using configurable maximum
+                const cappedHours = Math.min(totalHours, config.maxDailyHours);
                 
                 dailyStats.push({
                     date,
