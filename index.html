@@ -172,6 +172,10 @@
             position: relative;
         }
 
+        .heatmap-table td.data-cell {
+            filter: blur(1px);
+        }
+
         .heatmap-table td:hover::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -326,12 +330,12 @@
                     </div>
                 </div>
                 <div class="chart-card heatmap-card">
-                    <h3>Work Pattern Heatmap (15-minute intervals)</h3>
+                    <h3>Work Pattern Heatmap (Activity Distribution)</h3>
                     <div class="heatmap-container" ref="heatmapContainer"></div>
                     <div class="heatmap-legend">
-                        <span>Less</span>
+                        <span>Less Active</span>
                         <div class="heatmap-legend-gradient"></div>
-                        <span>More</span>
+                        <span>More Active</span>
                     </div>
                 </div>
             </div>
@@ -614,7 +618,7 @@
                     const firstDate = new Date(dailyStats[0].date);
                     const lastDate = new Date(dailyStats[dailyStats.length - 1].date);
 
-                    // Build interval data for all dates in range
+                    // Build interval data for all dates in range with improved interpretation
                     const intervalData = [];
 
                     for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
@@ -624,9 +628,17 @@
                         const dayData = dataMap.get(dateStr);
                         if (dayData) {
                             for (const session of dayData.sessions) {
-                                // Mark all 15-minute intervals during this session
                                 const startTime = session.startTime;
                                 const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1]));
+                                
+                                // Calculate session duration in minutes
+                                const sessionDurationMs = endTime.getTime() - startTime.getTime();
+                                const sessionDurationMinutes = sessionDurationMs / (1000 * 60);
+                                
+                                // Calculate weighted intensity based on session duration and message count
+                                const messageIntensity = Math.min(session.messages.length / 10, 2); // Scale message count
+                                const durationWeight = Math.min(sessionDurationMinutes / 60, 2); // Scale duration
+                                const baseIntensity = (messageIntensity + durationWeight) / 2;
                                 
                                 // Calculate start and end intervals (offset by 5 hours for 5am start)
                                 const startMinutes = (startTime.getHours() - 5 + 24) % 24 * 60 + startTime.getMinutes();
@@ -634,9 +646,20 @@
                                 const startInterval = Math.floor(startMinutes / 15);
                                 const endInterval = Math.min(95, Math.floor(endMinutes / 15));
                                 
-                                // Fill in the intervals
-                                for (let i = startInterval; i <= endInterval; i++) {
-                                    intervals[i] += 1; // Count overlapping sessions
+                                // Create a more natural distribution with falloff
+                                const centerInterval = Math.floor((startInterval + endInterval) / 2);
+                                const radius = Math.max(2, Math.floor((endInterval - startInterval) / 2));
+                                
+                                // Apply intensity with gaussian-like falloff
+                                for (let i = Math.max(0, centerInterval - radius * 2); i <= Math.min(95, centerInterval + radius * 2); i++) {
+                                    const distance = Math.abs(i - centerInterval);
+                                    const falloff = Math.exp(-(distance * distance) / (2 * radius * radius));
+                                    const intensity = baseIntensity * falloff;
+                                    
+                                    // Only apply if we're within the actual session bounds or close to them
+                                    if (i >= startInterval - 1 && i <= endInterval + 1) {
+                                        intervals[i] += intensity;
+                                    }
                                 }
                             }
                         }
@@ -692,19 +715,28 @@
                             const intensity = dayData.intervals[i];
                             
                             if (intensity > 0) {
-                                // Calculate color based on intensity
-                                const normalizedIntensity = intensity / maxIntensity;
-                                const hue = 217; // Blue hue
-                                const saturation = 70 + (normalizedIntensity * 20);
-                                const lightness = 90 - (normalizedIntensity * 40);
-                                cell.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                                // Add blur class for data cells
+                                cell.classList.add('data-cell');
                                 
-                                // Add tooltip
+                                // Improved color calculation with more dynamic range
+                                const normalizedIntensity = Math.min(intensity / maxIntensity, 1);
+                                const adjustedIntensity = Math.pow(normalizedIntensity, 0.7); // Gamma correction for better contrast
+                                
+                                // Use a more sophisticated color mapping
+                                const hue = 217; // Blue hue
+                                const saturation = 60 + (adjustedIntensity * 35);
+                                const lightness = 95 - (adjustedIntensity * 50);
+                                const alpha = 0.3 + (adjustedIntensity * 0.7);
+                                
+                                cell.style.backgroundColor = `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`;
+                                
+                                // Add tooltip with improved formatting
                                 const hourOffset = Math.floor(i / 4);
                                 const minute = (i % 4) * 15;
                                 const displayHour = (hourOffset + 5) % 24;
                                 const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                                cell.setAttribute('data-tooltip', `${timeStr} - ${intensity} session${intensity > 1 ? 's' : ''}`);
+                                const intensityStr = intensity.toFixed(1);
+                                cell.setAttribute('data-tooltip', `${timeStr} - ${intensityStr} activity units`);
                             }
                             
                             row.appendChild(cell);
