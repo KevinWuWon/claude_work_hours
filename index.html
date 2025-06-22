@@ -243,13 +243,7 @@
 
         @media (min-width: 768px) {
             .charts-container {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .charts-container {
-                grid-template-columns: 2fr 1fr;
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -329,12 +323,6 @@
                     <h3>Daily Work Hours</h3>
                     <div class="chart-container">
                         <canvas ref="dailyChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-card">
-                    <h3>Gap Distribution</h3>
-                    <div class="chart-container">
-                        <canvas ref="gapChart"></canvas>
                     </div>
                 </div>
                 <div class="chart-card heatmap-card">
@@ -422,13 +410,11 @@
                 
                 // Chart refs
                 const dailyChart = ref(null);
-                const gapChart = ref(null);
                 const heatmapContainer = ref(null);
                 const fileInput = ref(null);
                 
                 // Chart instances
                 let dailyChartInstance = null;
-                let gapChartInstance = null;
 
                 // Computed properties
                 const fileNames = computed(() => {
@@ -536,7 +522,6 @@
                         // Wait for DOM update then create charts
                         await nextTick();
                         createDailyChart(analysis.dailyStats);
-                        createGapChart(analysis.gapAnalysis);
                         createWorkPatternHeatmap(analysis.dailyStats);
                     } catch (err) {
                         errorMessage.value = err instanceof Error ? err.message : 'An error occurred';
@@ -590,73 +575,6 @@
                     });
                 };
 
-                const createGapChart = (gapAnalysis) => {
-                    const ctx = gapChart.value;
-                    if (!ctx) return;
-                    
-                    if (gapChartInstance) {
-                        gapChartInstance.destroy();
-                    }
-                    
-                    // Create histogram bins
-                    const maxGap = Math.min(Math.max(...gapAnalysis.gaps), 2 * 60 * 60 * 1000); // Cap at 2 hours
-                    const binCount = 20;
-                    const binSize = maxGap / binCount;
-                    
-                    const bins = new Array(binCount).fill(0);
-                    const labels = [];
-                    
-                    for (let i = 0; i < binCount; i++) {
-                        const binStart = i * binSize;
-                        const binEnd = (i + 1) * binSize;
-                        labels.push(`${Math.round(binStart / (1000 * 60))}-${Math.round(binEnd / (1000 * 60))}m`);
-                        
-                        // Count gaps in this bin
-                        for (const gap of gapAnalysis.gaps) {
-                            if (gap >= binStart && gap < binEnd) {
-                                bins[i]++;
-                            }
-                        }
-                    }
-                    
-                    gapChartInstance = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels,
-                            datasets: [{
-                                label: 'Frequency',
-                                data: bins,
-                                backgroundColor: 'rgba(34, 197, 94, 0.8)',
-                                borderColor: 'rgb(34, 197, 94)',
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Count'
-                                    }
-                                },
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Gap Duration'
-                                    }
-                                }
-                            },
-                            plugins: {
-                                legend: {
-                                    display: false
-                                }
-                            }
-                        }
-                    });
-                };
 
                 const createWorkPatternHeatmap = (dailyStats) => {
                     const container = heatmapContainer.value;
@@ -783,9 +701,6 @@
                     if (dailyChartInstance) {
                         dailyChartInstance.destroy();
                     }
-                    if (gapChartInstance) {
-                        gapChartInstance.destroy();
-                    }
                 });
 
                 return {
@@ -795,7 +710,6 @@
                     errorMessage,
                     analysisResults,
                     dailyChart,
-                    gapChart,
                     heatmapContainer,
                     fileInput,
                     fileNames,
