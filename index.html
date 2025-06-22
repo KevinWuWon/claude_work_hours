@@ -255,81 +255,104 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Claude Work Hours Analyzer</h1>
-            <p>Analyze your Claude conversation logs to estimate daily work hours</p>
-        </div>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h1>Claude Work Hours Analyzer</h1>
+                <p>Analyze your Claude conversation logs to estimate daily work hours</p>
+            </div>
 
-        <div class="upload-zone" id="uploadZone">
-            <h3>Drop JSONL files here</h3>
-            <p>Drag and drop your Claude conversation JSONL files, or click to select</p>
-            <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap;">
-                <button class="upload-button" id="uploadButton">Select Files</button>
-                <button class="upload-button" id="analyzeButton" style="background: #059669; display: none;">Analyze Files</button>
+            <div class="upload-zone" 
+                 :class="{ dragover: isDragOver }"
+                 @click="selectFiles"
+                 @dragover.prevent="handleDragOver"
+                 @drop.prevent="handleDrop"
+                 @dragleave.prevent="handleDragLeave">
+                <h3>Drop JSONL files here</h3>
+                <p>Drag and drop your Claude conversation JSONL files, or click to select</p>
+                <div style="display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap;">
+                    <button class="upload-button" @click.stop="selectFiles">Select Files</button>
+                    <button class="upload-button" 
+                            @click.stop="analyzeAccumulatedFiles"
+                            v-show="accumulatedFiles.length > 0"
+                            style="background: #059669;">
+                        Analyze Files
+                    </button>
+                </div>
+                <div v-if="accumulatedFiles.length > 0" style="margin-top: 1rem; font-size: 0.875rem; color: #64748b;">
+                    <strong>{{ accumulatedFiles.length }} files ready for analysis:</strong><br>
+                    {{ fileNames }}
+                </div>
+                <input type="file" 
+                       ref="fileInput"
+                       multiple 
+                       accept=".jsonl" 
+                       @change="handleFileSelect"
+                       style="display: none;">
             </div>
-            <div id="filesList" style="margin-top: 1rem; font-size: 0.875rem; color: #64748b;"></div>
-            <input type="file" id="fileInput" multiple accept=".jsonl" style="display: none;">
-        </div>
 
-        <div class="loading" id="loading">
-            <p>Analyzing conversations...</p>
-        </div>
+            <div class="loading" v-show="isLoading">
+                <p>Analyzing conversations...</p>
+            </div>
 
-        <div class="error hidden" id="error"></div>
+            <div class="error" v-if="errorMessage" v-text="errorMessage"></div>
 
-        <div class="stats-grid hidden" id="statsGrid">
-            <div class="stat-card">
-                <h4>Total Days</h4>
-                <div class="value" id="totalDays">0</div>
-            </div>
-            <div class="stat-card">
-                <h4>Total Hours</h4>
-                <div class="value" id="totalHours">0</div>
-            </div>
-            <div class="stat-card">
-                <h4>Avg Hours/Day</h4>
-                <div class="value" id="avgHours">0</div>
-            </div>
-            <div class="stat-card">
-                <h4>Max Day</h4>
-                <div class="value" id="maxHours">0</div>
-            </div>
-            <div class="stat-card">
-                <h4>Break Threshold</h4>
-                <div class="value" id="breakThreshold">0</div>
-            </div>
-            <div class="stat-card">
-                <h4>Sessions Analyzed</h4>
-                <div class="value" id="sessionsCount">0</div>
-            </div>
-        </div>
-
-        <div class="charts-container hidden" id="chartsContainer">
-            <div class="chart-card">
-                <h3>Daily Work Hours</h3>
-                <div class="chart-container">
-                    <canvas id="dailyChart"></canvas>
+            <div class="stats-grid" v-if="analysisResults">
+                <div class="stat-card">
+                    <h4>Total Days</h4>
+                    <div class="value">{{ totalDays }}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Hours</h4>
+                    <div class="value">{{ totalHours }}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Avg Hours/Day</h4>
+                    <div class="value">{{ avgHours }}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Max Day</h4>
+                    <div class="value">{{ maxHours }}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Break Threshold</h4>
+                    <div class="value">{{ breakThreshold }}</div>
+                </div>
+                <div class="stat-card">
+                    <h4>Sessions Analyzed</h4>
+                    <div class="value">{{ totalSessions }}</div>
                 </div>
             </div>
-            <div class="chart-card">
-                <h3>Gap Distribution</h3>
-                <div class="chart-container">
-                    <canvas id="gapChart"></canvas>
+
+            <div class="charts-container" v-if="analysisResults">
+                <div class="chart-card">
+                    <h3>Daily Work Hours</h3>
+                    <div class="chart-container">
+                        <canvas ref="dailyChart"></canvas>
+                    </div>
                 </div>
-            </div>
-            <div class="chart-card heatmap-card">
-                <h3>Work Pattern Heatmap (15-minute intervals)</h3>
-                <div class="heatmap-container" id="heatmapContainer"></div>
-                <div class="heatmap-legend">
-                    <span>Less</span>
-                    <div class="heatmap-legend-gradient"></div>
-                    <span>More</span>
+                <div class="chart-card">
+                    <h3>Gap Distribution</h3>
+                    <div class="chart-container">
+                        <canvas ref="gapChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card heatmap-card">
+                    <h3>Work Pattern Heatmap (15-minute intervals)</h3>
+                    <div class="heatmap-container" ref="heatmapContainer"></div>
+                    <div class="heatmap-legend">
+                        <span>Less</span>
+                        <div class="heatmap-legend-gradient"></div>
+                        <span>More</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
     <script type="module">
         // @ts-check
         
@@ -338,6 +361,9 @@
         
         // Register Chart.js components
         Chart.register(...registerables);
+        
+        // Vue app destructuring
+        const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick } = Vue;
 
         /**
          * @typedef {Object} ConversationMessage
@@ -384,155 +410,410 @@
          * @property {WorkSession[]} sessions
          */
 
-        /** @type {Chart | null} */
-        let dailyChart = null;
-        /** @type {Chart | null} */
-        let gapChart = null;
-        /** @type {File[]} */
-        let accumulatedFiles = [];
+        // Create Vue App
+        createApp({
+            setup() {
+                // Reactive state
+                const accumulatedFiles = ref([]);
+                const isDragOver = ref(false);
+                const isLoading = ref(false);
+                const errorMessage = ref('');
+                const analysisResults = ref(null);
+                
+                // Chart refs
+                const dailyChart = ref(null);
+                const gapChart = ref(null);
+                const heatmapContainer = ref(null);
+                const fileInput = ref(null);
+                
+                // Chart instances
+                let dailyChartInstance = null;
+                let gapChartInstance = null;
 
-        // DOM elements
-        const uploadZone = document.getElementById('uploadZone');
-        const uploadButton = document.getElementById('uploadButton');
-        const analyzeButton = document.getElementById('analyzeButton');
-        const filesList = document.getElementById('filesList');
-        const fileInput = document.getElementById('fileInput');
-        const loading = document.getElementById('loading');
-        const error = document.getElementById('error');
-        const statsGrid = document.getElementById('statsGrid');
-        const chartsContainer = document.getElementById('chartsContainer');
+                // Computed properties
+                const fileNames = computed(() => {
+                    const files = accumulatedFiles.value;
+                    const displayFiles = files.slice(0, 5).map(f => f.name).join(', ');
+                    return files.length > 5 ? `${displayFiles} and ${files.length - 5} more...` : displayFiles;
+                });
 
-        // Stats elements
-        const totalDaysEl = document.getElementById('totalDays');
-        const totalHoursEl = document.getElementById('totalHours');
-        const avgHoursEl = document.getElementById('avgHours');
-        const maxHoursEl = document.getElementById('maxHours');
-        const breakThresholdEl = document.getElementById('breakThreshold');
-        const sessionsCountEl = document.getElementById('sessionsCount');
+                const totalDays = computed(() => 
+                    analysisResults.value ? analysisResults.value.dailyStats.length : 0
+                );
 
-        // Event listeners
-        uploadZone?.addEventListener('click', () => fileInput?.click());
-        uploadButton?.addEventListener('click', () => fileInput?.click());
-        analyzeButton?.addEventListener('click', analyzeAccumulatedFiles);
-        fileInput?.addEventListener('change', handleFileSelect);
-        
-        // Drag and drop
-        uploadZone?.addEventListener('dragover', handleDragOver);
-        uploadZone?.addEventListener('drop', handleDrop);
-        uploadZone?.addEventListener('dragleave', handleDragLeave);
+                const totalHours = computed(() => 
+                    analysisResults.value 
+                        ? analysisResults.value.dailyStats.reduce((sum, day) => sum + day.totalHours, 0).toFixed(1)
+                        : '0'
+                );
 
-        /**
-         * Handle drag over event
-         * @param {DragEvent} e
-         */
-        function handleDragOver(e) {
-            e.preventDefault();
-            uploadZone?.classList.add('dragover');
-        }
+                const avgHours = computed(() => {
+                    if (!analysisResults.value || analysisResults.value.dailyStats.length === 0) return '0';
+                    const total = analysisResults.value.dailyStats.reduce((sum, day) => sum + day.totalHours, 0);
+                    return (total / analysisResults.value.dailyStats.length).toFixed(1);
+                });
 
-        /**
-         * Handle drag leave event
-         * @param {DragEvent} e
-         */
-        function handleDragLeave(e) {
-            e.preventDefault();
-            uploadZone?.classList.remove('dragover');
-        }
+                const maxHours = computed(() => 
+                    analysisResults.value 
+                        ? Math.max(...analysisResults.value.dailyStats.map(day => day.totalHours), 0).toFixed(1)
+                        : '0'
+                );
 
-        /**
-         * Handle drop event
-         * @param {DragEvent} e
-         */
-        function handleDrop(e) {
-            e.preventDefault();
-            uploadZone?.classList.remove('dragover');
-            
-            const files = e.dataTransfer?.files;
-            if (files) {
-                addFiles(Array.from(files));
+                const breakThreshold = computed(() => 
+                    analysisResults.value 
+                        ? `${Math.round(analysisResults.value.gapAnalysis.breakThresholdMs / (1000 * 60))}m`
+                        : '0'
+                );
+
+                const totalSessions = computed(() => 
+                    analysisResults.value ? analysisResults.value.totalSessions : 0
+                );
+
+                // Methods
+                const selectFiles = () => {
+                    fileInput.value?.click();
+                };
+
+                const handleDragOver = (e) => {
+                    e.preventDefault();
+                    isDragOver.value = true;
+                };
+
+                const handleDragLeave = (e) => {
+                    e.preventDefault();
+                    isDragOver.value = false;
+                };
+
+                const handleDrop = (e) => {
+                    e.preventDefault();
+                    isDragOver.value = false;
+                    
+                    const files = e.dataTransfer?.files;
+                    if (files) {
+                        addFiles(Array.from(files));
+                    }
+                };
+
+                const handleFileSelect = (e) => {
+                    const files = e.target.files;
+                    if (files) {
+                        addFiles(Array.from(files));
+                    }
+                };
+
+                const addFiles = (files) => {
+                    const jsonlFiles = files.filter(f => f.name.endsWith('.jsonl'));
+                    
+                    if (jsonlFiles.length === 0) {
+                        errorMessage.value = 'Please select JSONL files';
+                        return;
+                    }
+
+                    errorMessage.value = '';
+
+                    // Add new files, avoiding duplicates by name
+                    for (const file of jsonlFiles) {
+                        if (!accumulatedFiles.value.some(f => f.name === file.name)) {
+                            accumulatedFiles.value.push(file);
+                        }
+                    }
+                };
+
+                const analyzeAccumulatedFiles = async () => {
+                    if (accumulatedFiles.value.length === 0) {
+                        errorMessage.value = 'No files to analyze';
+                        return;
+                    }
+
+                    isLoading.value = true;
+                    errorMessage.value = '';
+
+                    try {
+                        const messages = await parseFiles(accumulatedFiles.value);
+                        const analysis = analyzeWorkHours(messages);
+                        analysisResults.value = analysis;
+                        
+                        // Wait for DOM update then create charts
+                        await nextTick();
+                        createDailyChart(analysis.dailyStats);
+                        createGapChart(analysis.gapAnalysis);
+                        createWorkPatternHeatmap(analysis.dailyStats);
+                    } catch (err) {
+                        errorMessage.value = err instanceof Error ? err.message : 'An error occurred';
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                // Chart creation functions
+                const createDailyChart = (dailyStats) => {
+                    const ctx = dailyChart.value;
+                    if (!ctx) return;
+                    
+                    if (dailyChartInstance) {
+                        dailyChartInstance.destroy();
+                    }
+                    
+                    dailyChartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: dailyStats.map(day => {
+                                const date = new Date(day.date);
+                                return `${date.getDate()}/${date.getMonth() + 1}`;
+                            }),
+                            datasets: [{
+                                label: 'Hours',
+                                data: dailyStats.map(day => day.totalHours),
+                                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                                borderColor: 'rgb(59, 130, 246)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Hours'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                };
+
+                const createGapChart = (gapAnalysis) => {
+                    const ctx = gapChart.value;
+                    if (!ctx) return;
+                    
+                    if (gapChartInstance) {
+                        gapChartInstance.destroy();
+                    }
+                    
+                    // Create histogram bins
+                    const maxGap = Math.min(Math.max(...gapAnalysis.gaps), 2 * 60 * 60 * 1000); // Cap at 2 hours
+                    const binCount = 20;
+                    const binSize = maxGap / binCount;
+                    
+                    const bins = new Array(binCount).fill(0);
+                    const labels = [];
+                    
+                    for (let i = 0; i < binCount; i++) {
+                        const binStart = i * binSize;
+                        const binEnd = (i + 1) * binSize;
+                        labels.push(`${Math.round(binStart / (1000 * 60))}-${Math.round(binEnd / (1000 * 60))}m`);
+                        
+                        // Count gaps in this bin
+                        for (const gap of gapAnalysis.gaps) {
+                            if (gap >= binStart && gap < binEnd) {
+                                bins[i]++;
+                            }
+                        }
+                    }
+                    
+                    gapChartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels,
+                            datasets: [{
+                                label: 'Frequency',
+                                data: bins,
+                                backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                                borderColor: 'rgb(34, 197, 94)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Count'
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Gap Duration'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                };
+
+                const createWorkPatternHeatmap = (dailyStats) => {
+                    const container = heatmapContainer.value;
+                    if (!container) return;
+
+                    if (dailyStats.length === 0) return;
+
+                    // Create a map of existing data
+                    const dataMap = new Map();
+                    for (const day of dailyStats) {
+                        dataMap.set(day.date, day);
+                    }
+
+                    // Find date range
+                    const firstDate = new Date(dailyStats[0].date);
+                    const lastDate = new Date(dailyStats[dailyStats.length - 1].date);
+
+                    // Build interval data for all dates in range
+                    const intervalData = [];
+
+                    for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+                        const dateStr = d.toISOString().split('T')[0];
+                        const intervals = new Array(96).fill(0); // 24 hours * 4 (15-min intervals)
+                        
+                        const dayData = dataMap.get(dateStr);
+                        if (dayData) {
+                            for (const session of dayData.sessions) {
+                                // Mark all 15-minute intervals during this session
+                                const startTime = session.startTime;
+                                const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1]));
+                                
+                                // Calculate start and end intervals (offset by 5 hours for 5am start)
+                                const startMinutes = (startTime.getHours() - 5 + 24) % 24 * 60 + startTime.getMinutes();
+                                const endMinutes = (endTime.getHours() - 5 + 24) % 24 * 60 + endTime.getMinutes();
+                                const startInterval = Math.floor(startMinutes / 15);
+                                const endInterval = Math.min(95, Math.floor(endMinutes / 15));
+                                
+                                // Fill in the intervals
+                                for (let i = startInterval; i <= endInterval; i++) {
+                                    intervals[i] += 1; // Count overlapping sessions
+                                }
+                            }
+                        }
+                        
+                        intervalData.push({
+                            date: dateStr,
+                            intervals,
+                            sessions: dayData ? dayData.sessions : []
+                        });
+                    }
+
+                    // Create the table
+                    const table = document.createElement('table');
+                    table.className = 'heatmap-table';
+
+                    // Create header row with time labels
+                    const headerRow = document.createElement('tr');
+                    headerRow.innerHTML = '<th></th>'; // Empty cell for day labels
+                    
+                    // Add hour headers (every 4 intervals = 1 hour, starting from 5am)
+                    for (let hour = 0; hour < 24; hour++) {
+                        const th = document.createElement('th');
+                        th.colSpan = 4;
+                        const displayHour = (hour + 5) % 24;
+                        th.textContent = displayHour.toString().padStart(2, '0');
+                        headerRow.appendChild(th);
+                    }
+                    table.appendChild(headerRow);
+
+                    // Find max intensity for color scaling
+                    const maxIntensity = Math.max(...intervalData.flatMap(d => d.intervals));
+
+                    // Create rows for each day
+                    for (const dayData of intervalData) {
+                        const row = document.createElement('tr');
+                        
+                        // Day label
+                        const dayLabel = document.createElement('td');
+                        dayLabel.className = 'day-label';
+                        const date = new Date(dayData.date);
+                        const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+                        
+                        if (dayOfWeek === 0 || dayOfWeek === 6) {
+                            dayLabel.classList.add('weekend');
+                        }
+                        
+                        dayLabel.textContent = `${date.getDate()}/${date.getMonth() + 1}`;
+                        row.appendChild(dayLabel);
+
+                        // Interval cells
+                        for (let i = 0; i < 96; i++) {
+                            const cell = document.createElement('td');
+                            const intensity = dayData.intervals[i];
+                            
+                            if (intensity > 0) {
+                                // Calculate color based on intensity
+                                const normalizedIntensity = intensity / maxIntensity;
+                                const hue = 217; // Blue hue
+                                const saturation = 70 + (normalizedIntensity * 20);
+                                const lightness = 90 - (normalizedIntensity * 40);
+                                cell.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                                
+                                // Add tooltip
+                                const hourOffset = Math.floor(i / 4);
+                                const minute = (i % 4) * 15;
+                                const displayHour = (hourOffset + 5) % 24;
+                                const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                                cell.setAttribute('data-tooltip', `${timeStr} - ${intensity} session${intensity > 1 ? 's' : ''}`);
+                            }
+                            
+                            row.appendChild(cell);
+                        }
+                        
+                        table.appendChild(row);
+                    }
+
+                    // Clear container and add table
+                    container.innerHTML = '';
+                    container.appendChild(table);
+                };
+
+                // Lifecycle hooks
+                onUnmounted(() => {
+                    if (dailyChartInstance) {
+                        dailyChartInstance.destroy();
+                    }
+                    if (gapChartInstance) {
+                        gapChartInstance.destroy();
+                    }
+                });
+
+                return {
+                    accumulatedFiles,
+                    isDragOver,
+                    isLoading,
+                    errorMessage,
+                    analysisResults,
+                    dailyChart,
+                    gapChart,
+                    heatmapContainer,
+                    fileInput,
+                    fileNames,
+                    totalDays,
+                    totalHours,
+                    avgHours,
+                    maxHours,
+                    breakThreshold,
+                    totalSessions,
+                    selectFiles,
+                    handleDragOver,
+                    handleDragLeave,
+                    handleDrop,
+                    handleFileSelect,
+                    analyzeAccumulatedFiles
+                };
             }
-        }
-
-        /**
-         * Handle file select event
-         * @param {Event} e
-         */
-        function handleFileSelect(e) {
-            const target = /** @type {HTMLInputElement} */ (e.target);
-            const files = target.files;
-            if (files) {
-                addFiles(Array.from(files));
-            }
-        }
-
-        /**
-         * Add files to the accumulated list
-         * @param {File[]} files
-         */
-        function addFiles(files) {
-            const jsonlFiles = files.filter(f => f.name.endsWith('.jsonl'));
-            
-            if (jsonlFiles.length === 0) {
-                showError('Please select JSONL files');
-                return;
-            }
-
-            hideError();
-
-            // Add new files, avoiding duplicates by name
-            for (const file of jsonlFiles) {
-                if (!accumulatedFiles.some(f => f.name === file.name)) {
-                    accumulatedFiles.push(file);
-                }
-            }
-
-            updateFilesList();
-            
-            if (accumulatedFiles.length > 0) {
-                analyzeButton?.style.setProperty('display', 'inline-block');
-            }
-        }
-
-        /**
-         * Update the files list display
-         */
-        function updateFilesList() {
-            if (!filesList) return;
-
-            if (accumulatedFiles.length === 0) {
-                filesList.textContent = '';
-                return;
-            }
-
-            filesList.innerHTML = `
-                <strong>${accumulatedFiles.length} files ready for analysis:</strong><br>
-                ${accumulatedFiles.slice(0, 5).map(f => f.name).join(', ')}
-                ${accumulatedFiles.length > 5 ? ` and ${accumulatedFiles.length - 5} more...` : ''}
-            `;
-        }
-
-        /**
-         * Analyze all accumulated files
-         */
-        async function analyzeAccumulatedFiles() {
-            if (accumulatedFiles.length === 0) {
-                showError('No files to analyze');
-                return;
-            }
-
-            showLoading(true);
-            hideError();
-
-            try {
-                const messages = await parseFiles(accumulatedFiles);
-                const analysis = analyzeWorkHours(messages);
-                displayResults(analysis);
-            } catch (err) {
-                showError(err instanceof Error ? err.message : 'An error occurred');
-            } finally {
-                showLoading(false);
-            }
-        }
+        }).mount('#app');
 
 
         /**
@@ -836,310 +1117,7 @@
             return dailyStats.sort((a, b) => a.date.localeCompare(b.date));
         }
 
-        /**
-         * Display analysis results
-         * @param {{ dailyStats: DailyStats[], gapAnalysis: GapAnalysis, totalSessions: number }} analysis
-         */
-        function displayResults(analysis) {
-            const { dailyStats, gapAnalysis, totalSessions } = analysis;
-            
-            // Update stats
-            const totalHours = dailyStats.reduce((sum, day) => sum + day.totalHours, 0);
-            const avgHours = dailyStats.length > 0 ? totalHours / dailyStats.length : 0;
-            const maxHours = Math.max(...dailyStats.map(day => day.totalHours), 0);
-            
-            if (totalDaysEl) totalDaysEl.textContent = dailyStats.length.toString();
-            if (totalHoursEl) totalHoursEl.textContent = totalHours.toFixed(1);
-            if (avgHoursEl) avgHoursEl.textContent = avgHours.toFixed(1);
-            if (maxHoursEl) maxHoursEl.textContent = maxHours.toFixed(1);
-            if (breakThresholdEl) breakThresholdEl.textContent = `${Math.round(gapAnalysis.breakThresholdMs / (1000 * 60))}m`;
-            if (sessionsCountEl) sessionsCountEl.textContent = totalSessions.toString();
-            
-            // Show results
-            statsGrid?.classList.remove('hidden');
-            chartsContainer?.classList.remove('hidden');
-            
-            // Create charts
-            createDailyChart(dailyStats);
-            createGapChart(gapAnalysis);
-            createWorkPatternHeatmap(dailyStats);
-        }
 
-        /**
-         * Create daily hours chart
-         * @param {DailyStats[]} dailyStats
-         */
-        function createDailyChart(dailyStats) {
-            const ctx = /** @type {HTMLCanvasElement} */ (document.getElementById('dailyChart'));
-            if (!ctx) return;
-            
-            if (dailyChart) {
-                dailyChart.destroy();
-            }
-            
-            dailyChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: dailyStats.map(day => {
-                        const date = new Date(day.date);
-                        return `${date.getDate()}/${date.getMonth() + 1}`;
-                    }),
-                    datasets: [{
-                        label: 'Hours',
-                        data: dailyStats.map(day => day.totalHours),
-                        backgroundColor: 'rgba(59, 130, 246, 0.8)',
-                        borderColor: 'rgb(59, 130, 246)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Hours'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    }
-                }
-            });
-        }
-
-        /**
-         * Create gap distribution chart
-         * @param {GapAnalysis} gapAnalysis
-         */
-        function createGapChart(gapAnalysis) {
-            const ctx = /** @type {HTMLCanvasElement} */ (document.getElementById('gapChart'));
-            if (!ctx) return;
-            
-            if (gapChart) {
-                gapChart.destroy();
-            }
-            
-            // Create histogram bins
-            const maxGap = Math.min(Math.max(...gapAnalysis.gaps), 2 * 60 * 60 * 1000); // Cap at 2 hours
-            const binCount = 20;
-            const binSize = maxGap / binCount;
-            
-            /** @type {number[]} */
-            const bins = new Array(binCount).fill(0);
-            /** @type {string[]} */
-            const labels = [];
-            
-            for (let i = 0; i < binCount; i++) {
-                const binStart = i * binSize;
-                const binEnd = (i + 1) * binSize;
-                labels.push(`${Math.round(binStart / (1000 * 60))}-${Math.round(binEnd / (1000 * 60))}m`);
-                
-                // Count gaps in this bin
-                for (const gap of gapAnalysis.gaps) {
-                    if (gap >= binStart && gap < binEnd) {
-                        bins[i]++;
-                    }
-                }
-            }
-            
-            gapChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Frequency',
-                        data: bins,
-                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
-                        borderColor: 'rgb(34, 197, 94)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Count'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Gap Duration'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    }
-                }
-            });
-        }
-
-        /**
-         * Create work pattern heatmap
-         * @param {DailyStats[]} dailyStats
-         */
-        function createWorkPatternHeatmap(dailyStats) {
-            const container = document.getElementById('heatmapContainer');
-            if (!container) return;
-
-            if (dailyStats.length === 0) return;
-
-            // Create a map of existing data
-            /** @type {Map<string, DailyStats>} */
-            const dataMap = new Map();
-            for (const day of dailyStats) {
-                dataMap.set(day.date, day);
-            }
-
-            // Find date range
-            const firstDate = new Date(dailyStats[0].date);
-            const lastDate = new Date(dailyStats[dailyStats.length - 1].date);
-
-            // Build interval data for all dates in range
-            /** @type {IntervalData[]} */
-            const intervalData = [];
-
-            for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
-                const dateStr = d.toISOString().split('T')[0];
-                const intervals = new Array(96).fill(0); // 24 hours * 4 (15-min intervals)
-                
-                const dayData = dataMap.get(dateStr);
-                if (dayData) {
-                    for (const session of dayData.sessions) {
-                        // Mark all 15-minute intervals during this session
-                        const startTime = session.startTime;
-                        const endTime = new Date(session.endTime.getTime() + estimateReadingTime(session.messages[session.messages.length - 1]));
-                        
-                        // Calculate start and end intervals (offset by 5 hours for 5am start)
-                        const startMinutes = (startTime.getHours() - 5 + 24) % 24 * 60 + startTime.getMinutes();
-                        const endMinutes = (endTime.getHours() - 5 + 24) % 24 * 60 + endTime.getMinutes();
-                        const startInterval = Math.floor(startMinutes / 15);
-                        const endInterval = Math.min(95, Math.floor(endMinutes / 15));
-                        
-                        // Fill in the intervals
-                        for (let i = startInterval; i <= endInterval; i++) {
-                            intervals[i] += 1; // Count overlapping sessions
-                        }
-                    }
-                }
-                
-                intervalData.push({
-                    date: dateStr,
-                    intervals,
-                    sessions: dayData ? dayData.sessions : []
-                });
-            }
-
-            // Create the table
-            const table = document.createElement('table');
-            table.className = 'heatmap-table';
-
-            // Create header row with time labels
-            const headerRow = document.createElement('tr');
-            headerRow.innerHTML = '<th></th>'; // Empty cell for day labels
-            
-            // Add hour headers (every 4 intervals = 1 hour, starting from 5am)
-            for (let hour = 0; hour < 24; hour++) {
-                const th = document.createElement('th');
-                th.colSpan = 4;
-                const displayHour = (hour + 5) % 24;
-                th.textContent = displayHour.toString().padStart(2, '0');
-                headerRow.appendChild(th);
-            }
-            table.appendChild(headerRow);
-
-            // Find max intensity for color scaling
-            const maxIntensity = Math.max(...intervalData.flatMap(d => d.intervals));
-
-            // Create rows for each day
-            for (const dayData of intervalData) {
-                const row = document.createElement('tr');
-                
-                // Day label
-                const dayLabel = document.createElement('td');
-                dayLabel.className = 'day-label';
-                const date = new Date(dayData.date);
-                const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
-                
-                if (dayOfWeek === 0 || dayOfWeek === 6) {
-                    dayLabel.classList.add('weekend');
-                }
-                
-                dayLabel.textContent = `${date.getDate()}/${date.getMonth() + 1}`;
-                row.appendChild(dayLabel);
-
-                // Interval cells
-                for (let i = 0; i < 96; i++) {
-                    const cell = document.createElement('td');
-                    const intensity = dayData.intervals[i];
-                    
-                    if (intensity > 0) {
-                        // Calculate color based on intensity
-                        const normalizedIntensity = intensity / maxIntensity;
-                        const hue = 217; // Blue hue
-                        const saturation = 70 + (normalizedIntensity * 20);
-                        const lightness = 90 - (normalizedIntensity * 40);
-                        cell.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-                        
-                        // Add tooltip
-                        const hourOffset = Math.floor(i / 4);
-                        const minute = (i % 4) * 15;
-                        const displayHour = (hourOffset + 5) % 24;
-                        const timeStr = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                        cell.setAttribute('data-tooltip', `${timeStr} - ${intensity} session${intensity > 1 ? 's' : ''}`);
-                    }
-                    
-                    row.appendChild(cell);
-                }
-                
-                table.appendChild(row);
-            }
-
-            // Clear container and add table
-            container.innerHTML = '';
-            container.appendChild(table);
-        }
-
-        /**
-         * Show loading state
-         * @param {boolean} show
-         */
-        function showLoading(show) {
-            if (loading) {
-                loading.style.display = show ? 'block' : 'none';
-            }
-        }
-
-        /**
-         * Show error message
-         * @param {string} message
-         */
-        function showError(message) {
-            if (error) {
-                error.textContent = message;
-                error.classList.remove('hidden');
-            }
-        }
-
-        /**
-         * Hide error message
-         */
-        function hideError() {
-            error?.classList.add('hidden');
-        }
     </script>
 </body>
 </html>
