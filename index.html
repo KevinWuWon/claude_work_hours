@@ -172,9 +172,6 @@
             position: relative;
         }
 
-        .heatmap-table td.data-cell {
-            filter: blur(1px);
-        }
 
         .heatmap-table td:hover::after {
             content: attr(data-tooltip);
@@ -849,9 +846,6 @@
                             const intensity = dayData.intervals[i];
                             
                             if (intensity > 0) {
-                                // Add blur class for data cells
-                                cell.classList.add('data-cell');
-                                
                                 // Improved color calculation with more dynamic range
                                 const normalizedIntensity = Math.min(intensity / maxIntensity, 1);
                                 const adjustedIntensity = Math.pow(normalizedIntensity, 0.7); // Gamma correction for better contrast
