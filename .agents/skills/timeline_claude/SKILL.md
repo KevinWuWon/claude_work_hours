@@ -7,6 +7,8 @@ description: Generate weekly HTML timelines from Claude Code session logs in ~/.
 
 Generates a self-contained weekly HTML timeline from Claude Code JSONL logs in `~/.claude/projects/`, grouped by project in a half-hour grid. It distinguishes hands-on user-message time from autonomous Claude-only activity and uses `codex exec --model gpt-5.4-nano` for session summaries.
 
+The generator ignores Claude transcripts whose recorded `cwd` is the current working directory or another git worktree of the same repository, so timeline-generation and skill-development chats do not appear in the report.
+
 ## Usage
 
 Run from the user's current directory (output goes there unless `--out` is set):
@@ -40,7 +42,6 @@ command uv run scripts/generate.py --last-4-weeks
 - `--tz TIMEZONE` — local timezone (default: `Australia/Sydney`).
 - `--out PATH` — output HTML path (default: `./timeline-claude-YYYY-Www.html`).
 - `--no-cache` — bypass the project-resolver + summary caches.
-- `--no-summarize` — skip LLM session summarization (fall back to first user message).
 - `--summary-workers N` — parallel `codex exec` workers (default 4).
 - `--open` — open the result in the default browser after writing.
 

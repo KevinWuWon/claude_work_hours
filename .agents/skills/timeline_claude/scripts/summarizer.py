@@ -120,8 +120,6 @@ def _run_codex(prompt: str, timeout: int = 90) -> tuple[str | None, str | None]:
                 "--skip-git-repo-check",
                 "--sandbox",
                 "read-only",
-                "--ask-for-approval",
-                "never",
                 "--color",
                 "never",
                 "--output-last-message",
@@ -220,6 +218,9 @@ def summarize_sessions(
         if len(failures) > 5:
             print(f"    ...and {len(failures) - 5} more", file=sys.stderr)
 
+    if failures:
+        raise RuntimeError(f"{len(failures)} session summary request(s) failed")
+
     if use_cache:
         _save_cache(cache)
     return cache
@@ -287,6 +288,9 @@ def summarize_session_days(
         print(f"  {len(failures)} failed:", file=sys.stderr)
         for key, err in failures[:5]:
             print(f"    {key} {err}", file=sys.stderr)
+
+    if failures:
+        raise RuntimeError(f"{len(failures)} session-day summary request(s) failed")
 
     if use_cache:
         _save_cache(cache)
@@ -367,6 +371,9 @@ def rollup_day_summaries(
         print(f"  {len(failures)} rollup failure(s):", file=sys.stderr)
         for line in failures[:5]:
             print(f"    {line}", file=sys.stderr)
+
+    if failures:
+        raise RuntimeError(f"{len(failures)} day rollup request(s) failed")
 
     if use_cache:
         _save_cache(cache)

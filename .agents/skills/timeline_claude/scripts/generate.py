@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import webbrowser
 from collections import defaultdict
@@ -132,6 +133,12 @@ _SYSTEM_TAG_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+_INTERNAL_SUMMARY_PROMPT_PREFIXES = (
+    "You are writing a one-line title for a coding session",
+    "You are writing a one-line summary of work done on",
+    "You are consolidating a list of micro-summaries",
+)
+
 
 def _strip_system_content(text: str) -> str:
     """Remove system-injected XML blocks. Returns the user-typed remainder."""
@@ -179,6 +186,55 @@ def _user_text(rec: dict) -> str:
                 raw = block.get("text", "")
                 break
     return _strip_system_content(raw)
+
+
+def _is_internal_summary_session(sess: Session) -> bool:
+    text = sess.first_user_text.lstrip()
+    return any(text.startswith(prefix) for prefix in _INTERNAL_SUMMARY_PROMPT_PREFIXES)
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _current_workspace_roots() -> list[Path]:
+    roots: list[Path] = []
+    cwd = Path.cwd().resolve()
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        result = None
+
+    if result and result.returncode == 0:
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                try:
+                    roots.append(Path(line.removeprefix("worktree ")).expanduser().resolve())
+                except OSError:
+                    continue
+
+    if cwd not in roots:
+        roots.append(cwd)
+    return roots
+
+
+def _is_current_workspace_session(sess: Session, roots: list[Path]) -> bool:
+    if not sess.cwd:
+        return False
+    try:
+        cwd = Path(sess.cwd).expanduser().resolve()
+    except OSError:
+        return False
+    return any(_is_relative_to(cwd, root) for root in roots)
 
 
 def _parse_ts(ts: str) -> datetime | None:
@@ -625,8 +681,6 @@ def main() -> int:
     parser.add_argument("--tz", default=DEFAULT_TZ, help=f"Timezone (default: {DEFAULT_TZ})")
     parser.add_argument("--out", default=None, help="Output HTML path")
     parser.add_argument("--no-cache", action="store_true", help="Bypass project-resolver cache")
-    parser.add_argument("--no-summarize", action="store_true", help="Skip LLM session summarization (use first user message instead)")
-    parser.add_argument("--no-rollup", action="store_true", help="Skip second-pass consolidation of per-day summaries")
     parser.add_argument("--summary-workers", type=int, default=4, help="Parallel `codex exec` workers")
     parser.add_argument("--open", dest="open_browser", action="store_true", help="Open result in browser")
     args = parser.parse_args()
@@ -673,10 +727,15 @@ def main() -> int:
 
     # Discover & parse
     session_files = list(discover_session_files(window_start, window_end))
+    ignored_workspace_roots = _current_workspace_roots()
     sessions: list[Session] = []
     for f in session_files:
         s = parse_session(f, tz)
         if s is None:
+            continue
+        if _is_internal_summary_session(s):
+            continue
+        if _is_current_workspace_session(s, ignored_workspace_roots):
             continue
         s.project = resolver.resolve(s.cwd)
         if s.first_local and s.last_local:
@@ -692,7 +751,7 @@ def main() -> int:
             rel_sessions.append(s)
 
     # Summarize sessions (cached).
-    if not args.no_summarize and rel_sessions:
+    if rel_sessions:
         # Whole-session summary (used for session-strip titles)
         summarize_sessions(rel_sessions, max_workers=args.summary_workers,
                            use_cache=not args.no_cache)
@@ -708,7 +767,7 @@ def main() -> int:
 
     # Build (project, date_iso) → list of per-session summaries, then roll up
     rollup_map: dict[tuple[str, str], str] = {}
-    if not args.no_summarize and not args.no_rollup and rel_sessions:
+    if rel_sessions:
         groups: dict[tuple[str, str], list[str]] = defaultdict(list)
         for s in rel_sessions:
             for date_iso, summary in s.day_summaries.items():
