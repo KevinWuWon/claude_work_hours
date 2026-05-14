@@ -1,6 +1,6 @@
 """Generate short summaries for Claude Code sessions.
 
-Uses the Codex CLI with gpt-5.4-nano for one-shot summarization. Results cached
+Uses the Codex CLI with gpt-5.4-mini for one-shot summarization. Results cached
 in ~/.claude/timeline-claude-summaries.json keyed by session_id (sessions are
 append-only so once summarized, the result is stable).
 """
@@ -115,7 +115,7 @@ def _run_codex(prompt: str, timeout: int = 90) -> tuple[str | None, str | None]:
                 "codex",
                 "exec",
                 "--model",
-                "gpt-5.4-nano",
+                "gpt-5.4-mini",
                 "--ephemeral",
                 "--skip-git-repo-check",
                 "--sandbox",
